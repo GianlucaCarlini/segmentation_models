@@ -1,4 +1,3 @@
-from xml.etree.ElementInclude import include
 from .blocks import decoder_block
 from .blocks import conv_bn_block
 from .blocks import AtrousSpatialPyramidPooling
@@ -20,6 +19,7 @@ def Unet(
     Args:
         input_shape (tuple): The shape of the input tensor in the format HxWxC
         backbone (str, optional): The backbone of the model. Defaults to "efficientnetb3".
+            valid backbones are [efficientnetb3, efficientnetv2_b3, mobilenetv2, resnet50].
         classes (int, optional): Number of classes to predict. Determines the output
             channel dimension of the model. Defaults to 1.
         decoder_activation (str, optional): The activation function of the decoder
