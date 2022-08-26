@@ -90,6 +90,8 @@ class ModelBackbones:
         "efficientnetb7": tf.keras.applications.efficientnet.EfficientNetB7,
         "resnet50": tf.keras.applications.resnet.ResNet50,
         "resnet101": tf.keras.applications.resnet.ResNet101,
+        "mobilenetv1": tf.keras.applications.mobilenet.MobileNet,
+        "mobilenetv2": tf.keras.applications.mobilenet_v2.MobileNetV2,
     }
 
     @property
@@ -124,6 +126,9 @@ class ModelBackbones:
         model_fn = self.models[name]
         model_fn = self.inject_submodules(model_fn)
         return model_fn
+
+    def get_feature_layers(self, name):
+        return self._backbone_layers[name]
 
     def get_backbone(self, name, *args, **kwargs):
 

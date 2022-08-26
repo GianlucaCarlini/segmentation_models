@@ -4,6 +4,7 @@ from .blocks import AtrousSpatialPyramidPooling
 import tensorflow as tf
 from tensorflow.keras.layers import Activation, BatchNormalization
 from tensorflow.keras.layers import Conv2D, UpSampling2D, Concatenate
+from .backbones import Backbones
 
 
 def Unet(
@@ -34,65 +35,10 @@ def Unet(
         tf.keras.Model: The segmentation model.
     """
 
-    if backbone == "efficientnetb3":
-
-        encoder = tf.keras.applications.efficientnet.EfficientNetB3(
-            include_top=False, input_shape=input_shape
-        )
-        layers = [
-            "block6a_expand_activation",
-            "block4a_expand_activation",
-            "block3a_expand_activation",
-            "block2a_expand_activation",
-        ]
-        x = encoder.get_layer("top_activation").output
-
-    elif backbone == "mobilenetv2":
-
-        encoder = tf.keras.applications.mobilenet_v2.MobileNetV2(
-            include_top=False, input_shape=input_shape
-        )
-        layers = [
-            "block_13_expand_relu",
-            "block_6_expand_relu",
-            "block_3_expand_relu",
-            "block_1_expand_relu",
-        ]
-        x = encoder.get_layer("out_relu").output
-
-    elif backbone == "resnet50":
-
-        encoder = tf.keras.applications.resnet50.ResNet50(
-            include_top=False, input_shape=input_shape
-        )
-        layers = [
-            "conv4_block6_out",
-            "conv3_block4_out",
-            "conv2_block3_out",
-            "conv1_relu",
-        ]
-        x = encoder.get_layer("conv5_block3_out").output
-
-    elif backbone == "efficientnetv2_b3":
-        encoder = tf.keras.applications.efficientnet_v2.EfficientNetV2B3(
-            include_top=False, input_shape=input_shape
-        )
-        layers = [
-            "block6a_expand_activation",
-            "block4a_expand_activation",
-            "block2c_add",
-            "block1b_add",
-        ]
-        x = encoder.get_layer("top_activation").output
-
-    else:
-        list_of_backbones = [
-            "efficientnetb3",
-            "mobilenetv2",
-            "resnet50",
-            "efficientnetv2_b3",
-        ]
-        raise ValueError(f"Valid backbones are: {list_of_backbones}")
+    encoder = Backbones.get_backbone(
+        backbone, include_top=False, input_shape=input_shape
+    )
+    layers = Backbones.get_feature_layers(backbone)
 
     skip_connections = []
     for layer in layers:
