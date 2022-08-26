@@ -1,11 +1,7 @@
 from xml.etree.ElementInclude import include
-from .blocks import (
-    decoder_block,
-    conv_bn_block,
-    transpose_bn_block,
-    AtrousSpatialPyramidPooling,
-    aspp_block,
-)
+from .blocks import decoder_block
+from .blocks import conv_bn_block
+from .blocks import AtrousSpatialPyramidPooling
 import tensorflow as tf
 from tensorflow.keras.layers import Activation, BatchNormalization
 from tensorflow.keras.layers import Conv2D, UpSampling2D, Concatenate
@@ -19,6 +15,24 @@ def Unet(
     final_activation="sigmoid",
     filters=[256, 128, 64, 32, 16],
 ):
+    """Instantiates a Unet-like segmentation model with custom backbones.
+
+    Args:
+        input_shape (tuple): The shape of the input tensor in the format HxWxC
+        backbone (str, optional): The backbone of the model. Defaults to "efficientnetb3".
+        classes (int, optional): Number of classes to predict. Determines the output
+            channel dimension of the model. Defaults to 1.
+        decoder_activation (str, optional): The activation function of the decoder
+            convolutional blocks. Defaults to "relu".
+        final_activation (str, optional): Activation function of the output layer.
+            Defaults to "sigmoid".
+        filters (list, optional): Number of filters of the successive decoder blocks,
+            starting from the deeper blocks (HxW / 16) up to the shallower (HxW).
+            Defaults to [256, 128, 64, 32, 16].
+
+    Returns:
+        tf.keras.Model: The segmentation model.
+    """
 
     if backbone == "efficientnetb3":
 
@@ -110,96 +124,31 @@ def Unet(
     return model
 
 
-def ASPP_Unet(
+def DeepLabV3Plus(
     input_shape,
-    backbone="efficientnetb3",
     classes=1,
-    decoder_activation="relu",
-    final_activation="sigmoid",
-    filters=[256, 128, 16],
-):
-
-    if backbone == "efficientnetb7":
-
-        encoder = tf.keras.applications.efficientnet.EfficientNetB7(
-            include_top=False, input_shape=input_shape
-        )
-        layers = [
-            "block3a_expand_activation",
-            "block2a_expand_activation",
-        ]
-        x = encoder.get_layer("block4a_expand_activation").output
-
-    elif backbone == "resnet50":
-
-        encoder = tf.keras.applications.resnet50.ResNet50(
-            include_top=False, input_shape=input_shape, include_preprocessing=False
-        )
-        layers = [
-            "conv2_block3_out",
-            "conv1_relu",
-        ]
-        x = encoder.get_layer("conv3_block4_out").output
-
-    elif backbone == "resnet152":
-        encoder = tf.keras.applications.resnet.ResNet152(
-            include_top=False, input_shape=input_shape, include_preprocessing=False
-        )
-        layers = [
-            "conv2_block3_out",
-            "conv1_relu",
-        ]
-        x = encoder.get_layer("conv3_block8_out").output
-
-    else:
-        list_of_backbones = [
-            "efficientnetb7",
-            "resnet50",
-            "resnet152",
-        ]
-        raise ValueError(f"Valid backbones are: {list_of_backbones}")
-
-    skip_connections = []
-    for layer in layers:
-        skip_connections.append(encoder.get_layer(layer).output)
-
-    x = aspp_block(x, 256)
-
-    for i, skip in enumerate(skip_connections):
-        if backbone == "efficientnetv2_b3" and i > 1:
-            skip = BatchNormalization(axis=-1, name=f"BatchNorm_{i}")(skip)
-            skip = Activation("swish", name=f"Activation_{i}")(skip)
-        x = decoder_block(
-            inputs=x,
-            filters=filters[i],
-            stage=i,
-            skip=skip,
-            activation=decoder_activation,
-        )
-
-    x = decoder_block(
-        inputs=x, filters=filters[-1], stage=4, activation=decoder_activation
-    )
-
-    x = Conv2D(filters=classes, kernel_size=(3, 3), padding="same", name="final_conv")(
-        x
-    )
-    x = Activation(final_activation, name=final_activation)(x)
-
-    model = tf.keras.models.Model(encoder.input, x)
-
-    return model
-
-
-def DeepLabV3(
-    image_size,
-    classes,
     final_activation="sigmoid",
     dilation_rates=(1, 6, 12, 18),
     backbone="resnet101",
 ):
+    """Instantiates a DeepLabV3+ model with custom backbones
 
-    model_input = tf.keras.Input(shape=(image_size, image_size, 3))
+    Args:
+        input_shape (tuple): Shape of the input tensor in format HxWxC
+        classes (int, optional): Number of classes to predict. Determines the output
+            channel dimension of the model. Defaults to 1.
+        final_activation (str, optional): Activation function of the output layer.
+            Defaults to "sigmoid".
+        dilation_rates (tuple, optional): Dilation rates of the ASPP layer.
+            Defaults to (1, 6, 12, 18).
+        backbone (str, optional): The backbone of the model. Defaults to "resnet101".
+            valid backcones are: [resnet101, efficientnetb3]
+
+    Returns:
+        tf.keras.Model: The segmentation model
+    """
+
+    model_input = tf.keras.Input(shape=input_shape)
     if backbone == "resnet101":
         encoder = tf.keras.applications.resnet.ResNet101(
             input_tensor=model_input, include_top=False, weights="imagenet"
@@ -221,7 +170,7 @@ def DeepLabV3(
     x = AtrousSpatialPyramidPooling(x, dilation_rates=dilation_rates)
 
     input_a = UpSampling2D(
-        size=(image_size // 4 // x.shape[1], image_size // 4 // x.shape[2]),
+        size=(input_shape[0] // 4 // x.shape[1], input_shape[1] // 4 // x.shape[2]),
         interpolation="bilinear",
     )(x)
     input_b = encoder.get_layer(layers[1]).output
@@ -231,7 +180,7 @@ def DeepLabV3(
     x = conv_bn_block(x, filters=256, k_size=3, name="decoder_stage1_0")
     x = conv_bn_block(x, filters=256, k_size=3, name="decoder_stage1_1")
     x = UpSampling2D(
-        size=(image_size // x.shape[1], image_size // x.shape[2]),
+        size=(input_shape[0] // x.shape[1], input_shape[1] // x.shape[2]),
         interpolation="bilinear",
     )(x)
     model_output = Conv2D(
