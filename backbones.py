@@ -65,6 +65,18 @@ class ModelBackbones:
             "conv2_block3_out",
             "conv1_relu",
         ),
+        "mobilenetv1": (
+            "conv_pw_11_relu",
+            "conv_pw_5_relu",
+            "conv_pw_3_relu",
+            "conv_pw_1_relu",
+        ),
+        "mobilenetv2": (
+            "block_13_expand_relu",
+            "block_6_expand_relu",
+            "block_3_expand_relu",
+            "block_1_expand_relu",
+        ),
     }
 
     _models = {
