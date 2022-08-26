@@ -40,6 +40,8 @@ def Unet(
     )
     layers = Backbones.get_feature_layers(backbone)
 
+    x = encoder.output
+
     skip_connections = []
     for layer in layers:
         skip_connections.append(encoder.get_layer(layer).output)
