@@ -20,7 +20,6 @@ def Unet(
     Args:
         input_shape (tuple): The shape of the input tensor in the format HxWxC
         backbone (str, optional): The backbone of the model. Defaults to "efficientnetb3".
-            valid backbones are [efficientnetb3, efficientnetv2_b3, mobilenetv2, resnet50].
         classes (int, optional): Number of classes to predict. Determines the output
             channel dimension of the model. Defaults to 1.
         decoder_activation (str, optional): The activation function of the decoder
@@ -97,22 +96,11 @@ def DeepLabV3Plus(
     """
 
     model_input = tf.keras.Input(shape=input_shape)
-    if backbone == "resnet101":
-        encoder = tf.keras.applications.resnet.ResNet101(
-            input_tensor=model_input, include_top=False, weights="imagenet"
-        )
 
-        layers = ["conv4_block6_2_relu", "conv2_block3_2_relu"]
-
-    elif backbone == "efficientnetb3":
-        encoder = tf.keras.applications.efficientnet.EfficientNetB3(
-            input_tensor=model_input, include_top=False
-        )
-        layers = ["block6a_expand_activation", "block3a_expand_activation"]
-
-    else:
-        backbone_list = ["resnet101", "efficientnetb3"]
-        raise ValueError(f"Valid backbones are: {backbone_list}")
+    encoder = Backbones.get_backbone(
+        backbone, input_tensor=model_input, include_top=False
+    )
+    layers = Backbones.get_feature_layers(backbone)
 
     x = encoder.get_layer(layers[0]).output
     x = AtrousSpatialPyramidPooling(x, dilation_rates=dilation_rates)
@@ -121,7 +109,7 @@ def DeepLabV3Plus(
         size=(input_shape[0] // 4 // x.shape[1], input_shape[1] // 4 // x.shape[2]),
         interpolation="bilinear",
     )(x)
-    input_b = encoder.get_layer(layers[1]).output
+    input_b = encoder.get_layer(layers[2]).output
     input_b = conv_bn_block(input_b, filters=48, k_size=1, name="decoder_stage0")
 
     x = Concatenate(axis=-1)([input_a, input_b])
