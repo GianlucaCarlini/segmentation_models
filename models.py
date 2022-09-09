@@ -61,10 +61,14 @@ def Unet(
         inputs=x, filters=filters[-1], stage=4, activation=decoder_activation
     )
 
-    x = Conv2D(filters=classes, kernel_size=(3, 3), padding="same", name="final_conv")(
-        x
-    )
-    x = Activation(final_activation, name=final_activation)(x)
+    x = Conv2D(
+        filters=classes,
+        kernel_size=(3, 3),
+        padding="same",
+        name="final_conv",
+        dtype="float32",
+    )(x)
+    x = Activation(final_activation, name=final_activation, dtype="float32")(x)
 
     model = tf.keras.models.Model(encoder.input, x)
 
@@ -89,7 +93,6 @@ def DeepLabV3Plus(
         dilation_rates (tuple, optional): Dilation rates of the ASPP layer.
             Defaults to (1, 6, 12, 18).
         backbone (str, optional): The backbone of the model. Defaults to "resnet101".
-            valid backcones are: [resnet101, efficientnetb3]
 
     Returns:
         tf.keras.Model: The segmentation model
@@ -119,8 +122,8 @@ def DeepLabV3Plus(
         size=(input_shape[0] // x.shape[1], input_shape[1] // x.shape[2]),
         interpolation="bilinear",
     )(x)
-    model_output = Conv2D(
-        classes, kernel_size=1, activation=final_activation, padding="same"
-    )(x)
+    x = Conv2D(classes, kernel_size=1, padding="same", dtype="float32")(x)
 
-    return tf.keras.Model(inputs=model_input, outputs=model_output)
+    x = Activation(final_activation, name=final_activation, dtype="float32")(x)
+
+    return tf.keras.Model(inputs=model_input, outputs=x)
