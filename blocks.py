@@ -310,10 +310,11 @@ class DropPath(Layer):
             return x
 
         keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = tf.random.uniform(shape=shape)
-        random_tensor = tf.where(random_tensor < keep_prob, 1, 0)
-        output = tf.math.divide(x, keep_prob) * random_tensor
+        random_tensor = keep_prob
+        shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
+        random_tensor += tf.random.uniform(shape, dtype=x.dtype)
+        binary_tensor = tf.floor(random_tensor)
+        output = tf.math.divide(x, keep_prob) * binary_tensor
 
         return output
 

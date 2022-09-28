@@ -11,7 +11,7 @@ from tensorflow.keras.layers import Conv2D
 
 def SwinTransformer(
     input_shape=(224, 224, 3),
-    model_name="swin_tiny_patch4_window7_224",
+    model_name="swin_tiny_224",
     include_top=False,
     patch_size=(4, 4),
     num_classes=1000,
@@ -30,6 +30,38 @@ def SwinTransformer(
     patch_norm=True,
     **kwargs,
 ):
+    """Instantiates the Swin Transformer Model. The default arguments are the ones of the
+       original Swin Transformer tiny. The implementation is slightly different from the original
+       since it uses the SpaceToDepth tf layer to perform the patch merging operation. It is indeed the
+       same operation of the original PatchMerging definded by the authors, but I preferred to use
+       a standard tf layer rather than the custom implementation of the authors.
+       Probably this does not allow to use the original pre-trained weights, but I still have
+       to test it.
+
+
+    Args:
+        input_shape (tuple, optional): The input shape of the model. Defaults to (224, 224, 3).
+        model_name (str, optional): The model name. Defaults to "swin_tiny_224".
+        include_top (bool, optional): Whether to include or not the top of the encoder. Defaults to False.
+        patch_size (tuple, optional): The size of the patches for the embedding. Defaults to (4, 4).
+        num_classes (int, optional): The number of classes to predict, only meaningful if include top is True. Defaults to 1000.
+        embed_dim (int, optional): The initial embedding dimension of the SwinBlock. Defaults to 96.
+        depths (list, optional): The number of SwinTransformer layers, each composed by depths[i] blocks. Defaults to [2, 2, 6, 2].
+        num_heads (list, optional): The number of heads in the multi-head self-attention for each layer. Defaults to [3, 6, 12, 24].
+        window_size (int, optional): The size of the attention window. Defaults to 7.
+        mlp_ratio (float, optional): The ratio of hidden neurons to input neurons in the Attention layer. Defaults to 4.0.
+        qkv_bias (bool, optional): Whether to add the bias in the qkv calculation. Defaults to True.
+        qk_scale (_type_, optional): Scale of the qk attention matrix, if None, sqrt(dim/num_heads) is used. Defaults to None.
+        drop_rate (float, optional): The dropout rate. Defaults to 0.0.
+        attn_drop_rate (float, optional): The attention dropout rate. Defaults to 0.0.
+        drop_path_rate (float, optional): The drop path rate. Defaults to 0.1.
+        norm_layer (_type_, optional): The normalization layer. Defaults to LayerNormalization.
+        ape (bool, optional): Does nothing, to be implemented. Defaults to False.
+        patch_norm (bool, optional): Whether to normalize or not the initial patch embedding. Defaults to True.
+
+    Returns:
+        tf.Model: The builded SwinTransformer Model
+    """
 
     if input_shape[0] % window_size != 0 or input_shape[1] % window_size != 0:
         raise ValueError(
@@ -116,6 +148,42 @@ def Swin_Unet(
     patch_norm=True,
     **kwargs,
 ):
+    """Instantiates a UNet-like model with a Swin Transformer backbone.
+    The decoder has the same layer types of the encoder, meaning that the whole
+    model only uses the mechanism of attention (no convolution is used, except
+    for the output). The upsampling also follows the Swin Transformer implementation
+    and uses the tensorflow layer depth to space.
+
+    Args:
+        input_shape (tuple, optional): The shape of the input tensor. Defaults to (224, 224, 3).
+        model_name (str, optional): The name of the model. Defaults to "swin_tiny_224".
+        classes (int, optional): The number of output classes, i.e., the number of
+            output feature maps Defaults to 1.
+        final_activation (str, optional): The activation function of the output layer.
+            Defaults to "sigmoid".
+        patch_size (tuple, optional): The size of the patches for the embedding.
+            Defaults to (4, 4).
+        embed_dim (int, optional): The initial embedding dimension of the SwinBlock. Defaults to 96.
+        depths (list, optional): The number of SwinTransformer layers, each composed by depths[i] blocks.
+            Defaults to [2, 2, 6, 2].
+        num_heads (list, optional): The number of heads in the multi-head self-attention for each layer.
+            Defaults to [3, 6, 12, 24].
+        window_size (int, optional): The size of the attention window. Defaults to 7.
+        mlp_ratio (float, optional): The ratio of hidden neurons to input neurons in the Attention layer.
+            Defaults to 4.0.
+        qkv_bias (bool, optional): Whether to add the bias in the qkv calculation. Defaults to True.
+        qk_scale (_type_, optional): Scale of the qk attention matrix, if None, sqrt(dim/num_heads) is used.
+            Defaults to None.
+        drop_rate (float, optional): The dropout rate. Defaults to 0.0.
+        attn_drop_rate (float, optional):The attention dropout rate. Defaults to 0.0.
+        drop_path_rate (float, optional): The drop path rate. Defaults to 0.1.
+        norm_layer (_type_, optional): The normalization layer. Defaults to LayerNormalization.
+        ape (bool, optional): Does nothing, to be implemented. Defaults to False.
+        patch_norm (bool, optional): Whether to normalize or not the initial patch embedding. Defaults to True.
+
+    Returns:
+        tf.Model: The builded SwinTransformer UNet Model
+    """
 
     output_stride = 2 ** (len(depths) + 1)
 
@@ -208,6 +276,6 @@ def Swin_Unet(
         x
     )
 
-    swin_unet = tf.keras.models.Model(inputs=encoder.input, outputs=x, name="Swin Unet")
+    swin_unet = tf.keras.models.Model(inputs=encoder.input, outputs=x, name=model_name)
 
     return swin_unet
