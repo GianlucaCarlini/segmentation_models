@@ -185,7 +185,7 @@ def Swin_Unet(
         tf.Model: The builded SwinTransformer UNet Model
     """
 
-    output_stride = 2 ** (len(depths) + 1)
+    output_stride = (2 ** len(depths)) * (patch_size[0] // 2)
 
     if input_shape[0] % output_stride != 0 or input_shape[1] % output_stride != 0:
         raise ValueError(
@@ -261,12 +261,12 @@ def Swin_Unet(
 
     x = PatchExpanding(
         input_resolution=(
-            input_resolution[0] * (output_stride // 4),
-            input_resolution[1] * (output_stride // 4),
+            input_resolution[0] * (output_stride // patch_size[0]),
+            input_resolution[1] * (output_stride // patch_size[1]),
         ),
         dim=x.shape[-1],
         expand_dims=True,
-        upsample=4,
+        upsample=patch_size[0],
         prefix="decoder_final",
     )(x)
 
