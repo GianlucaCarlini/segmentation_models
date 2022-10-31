@@ -1,0 +1,13 @@
+*h5
+*.png
+*.svg
+*.zip
+*.tif
+*.pdf
+*.csv
+*.xls
+*.xlsx
+*.html
+*onnx
+.vscode/
+__pycache__/

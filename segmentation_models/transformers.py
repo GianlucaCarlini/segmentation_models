@@ -239,7 +239,7 @@ def Swin_Unet(
         x = SwinDecoderLayer(
             input=x,
             skip=skip,
-            dim=int(embed_dim * 2 ** (len(depths) - 1 - i)),
+            dim=int(embed_dim * 2 ** (len(depths) - 2 - i)),
             input_resolution=(
                 input_resolution[0] * (2**i),
                 input_resolution[1] * (2**i),
@@ -254,7 +254,7 @@ def Swin_Unet(
             attn_drop=attn_drop_rate,
             drop_path_prob=0.0,
             norm_layer=norm_layer,
-            expand_dims=True if i == 0 else False,
+            expand_dims=True,
             upsample=PatchExpanding,
             prefix=f"decoder_{i}",
         )
@@ -264,7 +264,7 @@ def Swin_Unet(
             input_resolution[0] * (output_stride // patch_size[0]),
             input_resolution[1] * (output_stride // patch_size[1]),
         ),
-        dim=x.shape[-1],
+        dim=int(x.shape[-1] // 2),
         expand_dims=True,
         upsample=patch_size[0],
         prefix="decoder_final",

@@ -606,7 +606,7 @@ class PatchExpanding(Layer):
         if (dim is not None) and expand_dims:
             self.dim = dim
             self.expansion = Dense(
-                dim // self.upsample,
+                dim,
                 use_bias=False,
                 name=f"{prefix}_upsample_expansion",
             )
@@ -723,6 +723,7 @@ def SwinDecoderLayer(
         )(input)
         input_resolution = (input_resolution[0] * 2, input_resolution[1] * 2)
     x = Concatenate(axis=-1, name=f"{prefix}_concat")([x, skip])
+    x = Dense(dim, use_bias=False, name=f"{prefix}_projection")(x)
 
     for i in range(depth):
 
