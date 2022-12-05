@@ -115,6 +115,56 @@ def AtrousSpatialPyramidPooling(inputs, dilation_rates=(1, 6, 12, 18)):
     return output
 
 
+class ConvNextBlock(tf.keras.layers.Layer):
+    def __init__(
+        self, dim, drop_path=None, layer_scale_init_value=None, name=""
+    ) -> None:
+        super().__init__(name=name)
+
+        self.dw_conv = tf.keras.layers.DepthwiseConv2D(
+            kernel_size=7, padding="same", depth_multiplier=1
+        )
+        self.norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.pw_conv = tf.keras.layers.Dense(
+            units=4 * dim,
+        )
+        self.act = tf.keras.layers.Activation("gelu")
+        self.pw_conv_2 = tf.keras.layers.Dense(
+            units=dim,
+        )
+        if layer_scale_init_value is not None:
+            self.gamma = tf.Variable(
+                layer_scale_init_value * tf.ones(shape=dim), trainable=True
+            )
+        else:
+            self.gamma = None
+
+        if drop_path is not None:
+            self.drop_path = DropPath(drop_path)
+        else:
+            self.drop_path = None
+
+    def call(self, x):
+
+        input = x
+
+        x = self.dw_conv(x)
+        x = self.norm(x)
+        x = self.pw_conv(x)
+        x = self.act(x)
+        x = self.pw_conv_2(x)
+
+        if self.gamma is not None:
+            x = self.gamma * x
+
+        if self.drop_path is not None:
+            x = self.drop_path(x)
+
+        x = input + x
+
+        return x
+
+
 def window_partition(x, window_size):
     """Partitions the image in a number of windows of size window_size
 
