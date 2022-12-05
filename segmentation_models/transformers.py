@@ -143,6 +143,7 @@ def Swin_Unet(
     drop_rate=0.0,
     attn_drop_rate=0.0,
     drop_path_rate=0.1,
+    final_conv_layers=16,
     norm_layer=LayerNormalization,
     ape=False,
     patch_norm=True,
@@ -177,12 +178,13 @@ def Swin_Unet(
         drop_rate (float, optional): The dropout rate. Defaults to 0.0.
         attn_drop_rate (float, optional):The attention dropout rate. Defaults to 0.0.
         drop_path_rate (float, optional): The drop path rate. Defaults to 0.1.
+        final_conv_layers(int, optional): The number of convolutional layers before the output layer. Defaults to 16.
         norm_layer (_type_, optional): The normalization layer. Defaults to LayerNormalization.
         ape (bool, optional): Does nothing, to be implemented. Defaults to False.
         patch_norm (bool, optional): Whether to normalize or not the initial patch embedding. Defaults to True.
 
     Returns:
-        tf.Model: The builded SwinTransformer UNet Model
+        tf.Model: The built SwinTransformer UNet Model
     """
 
     output_stride = (2 ** len(depths)) * (patch_size[0] // 2)
@@ -271,6 +273,10 @@ def Swin_Unet(
     )(x)
 
     x = tf.reshape(x, shape=(-1, input_shape[0], input_shape[1], x.shape[-1]))
+
+    x = Conv2D(
+        final_conv_layers, kernel_size=3, activation="gelu", name="output_conv_layer"
+    )(x)
 
     x = Conv2D(classes, kernel_size=1, activation=final_activation, name="final_conv")(
         x
