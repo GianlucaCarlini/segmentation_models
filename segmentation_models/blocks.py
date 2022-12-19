@@ -12,6 +12,7 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import LayerNormalization
 from tensorflow.keras.layers import GlobalAveragePooling1D
+from tensorflow.keras import layers
 import numpy as np
 
 
@@ -113,6 +114,53 @@ def AtrousSpatialPyramidPooling(inputs, dilation_rates=(1, 6, 12, 18)):
     output = conv_bn_block(x, k_size=1, filters=256, name="ASPP_out")
 
     return output
+
+
+class ResidualBlock(layers.Layer):
+    def __init__(
+        self, output_dim, norm_layer=None, activation="swish", **kwargs
+    ) -> None:
+        """Standard residual block with pre-activation https://paperswithcode.com/method/residual-block
+
+        Args:
+            output_dim (int): The output channel dimension.
+            norm_layer (tf.keras.layers.Layer, optional): The normalization layer
+                to be applied befor the activation and the convolution. Defaults to None.
+                If None, LayerNormalization is applied.
+            activation (str, optional): The activation function for the residual.
+                Defaults to "swish".
+        """
+        super().__init__(**kwargs)
+
+        self.outpud_dim = output_dim
+
+        if norm_layer is not None:
+            self.norm1 = norm_layer
+            self.norm2 = norm_layer
+        else:
+            self.norm1 = layers.LayerNormalization(epsilon=1e-6)
+            self.norm2 = layers.LayerNormalization(epsilon=1e-6)
+
+        self.act1 = layers.Activation(activation=activation)
+        self.conv1 = layers.Conv2D(output_dim, kernel_size=3, padding="same")
+        self.act2 = layers.Activation(activation=activation)
+        self.conv2 = layers.Conv2D(output_dim, kernel_size=3, padding="same")
+        self.proj = layers.Conv2D(output_dim, kernel_size=1)
+
+    def call(self, inputs):
+
+        x = self.norm1(inputs)
+        x = self.act1(x)
+        x = self.conv1(x)
+
+        x = self.norm2(x)
+        x = self.act2(x)
+        x = self.conv2(x)
+
+        if self.outpud_dim != inputs.shape[-1]:
+            inputs = self.proj(inputs)
+
+        return x + inputs
 
 
 class ConvNextBlock(tf.keras.layers.Layer):
