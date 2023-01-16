@@ -138,8 +138,8 @@ class ResidualBlock(layers.Layer):
             self.norm1 = norm_layer
             self.norm2 = norm_layer
         else:
-            self.norm1 = layers.LayerNormalization(epsilon=1e-6)
-            self.norm2 = layers.LayerNormalization(epsilon=1e-6)
+            self.norm1 = layers.LayerNormalization(epsilon=1e-5)
+            self.norm2 = layers.LayerNormalization(epsilon=1e-5)
 
         self.act1 = layers.Activation(activation=activation)
         self.conv1 = layers.Conv2D(output_dim, kernel_size=3, padding="same")
@@ -265,26 +265,46 @@ class Mlp(Layer):
         hidden_features=None,
         out_features=None,
         drop=0.0,
-        act_layer=Activation(tf.nn.gelu),
-        prefix="",
+        activation="gelu",
+        name=None,
+        **kwargs,
     ) -> None:
-        super().__init__()
+        super().__init__(name=name, **kwargs)
 
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
 
-        self.dense1 = Dense(hidden_features, name=f"{prefix}_mlp_dense1")
-        self.dense2 = Dense(out_features, name=f"{prefix}_mlp_dense2")
-        self.drop = Dropout(drop)
-        self.act = act_layer
+        self.in_features = in_features
+        self.hidden_features = hidden_features
+        self.out_features = out_features
+        self.drop = drop
+
+        self.dense1 = Dense(self.hidden_features, name=f"{name}_mlp_dense1")
+        self.dense2 = Dense(self.out_features, name=f"{name}_mlp_dense2")
+        self.dropout = Dropout(self.drop)
+        self.activation = tf.keras.activations.get(activation)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "in_features": self.in_features,
+                "hidden_features": self.hidden_features,
+                "out_features": self.out_features,
+                "drop": self.drop,
+                "activation_layer": tf.keras.activations.serialize(self.activation),
+                "name": self.name,
+            }
+        )
+        return config
 
     def call(self, x):
 
         x = self.dense1(x)
-        x = self.act(x)
-        x = self.drop(x)
+        x = self.activation(x)
+        x = self.dropout(x)
         x = self.dense2(x)
-        x = self.drop(x)
+        x = self.dropout(x)
 
         return x
 
@@ -299,24 +319,43 @@ class WindowAttention(tf.keras.layers.Layer):
         qk_scale=None,
         attn_drop=0.0,
         proj_drop=0.0,
-        prefix="",
+        name=None,
+        **kwargs,
     ):
-        super().__init__(name="WindowAttention")
+        super().__init__(name=name, **kwargs)
         self.dim = dim
         self.window_size = window_size
         self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim**-0.5
-        self.prefix = prefix
+        self.qkv_bias = qkv_bias
+        head_dim = self.dim // self.num_heads
+        self.qk_scale = qk_scale or head_dim**-0.5
 
-        self.qkv = Dense(dim * 3, use_bias=qkv_bias, name=f"{self.prefix}/attn/qkv")
+        self.qkv = Dense(
+            self.dim * 3, use_bias=self.qkv_bias, name=f"{self.name}_attn_qkv"
+        )
         self.attn_drop = Dropout(attn_drop)
-        self.proj = Dense(dim, name=f"{self.prefix}/attn/proj")
+        self.proj = Dense(self.dim, name=f"{self.name}_attn_proj")
         self.proj_drop = Dropout(proj_drop)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "dim": self.dim,
+                "window_size": self.window_size,
+                "num_heads": self.num_heads,
+                "qkv_bias": self.qkv_bias,
+                "qk_scale": self.qk_scale,
+                "attn_drop": self.attn_drop,
+                "proj_drop": self.proj_drop,
+                "name": self.name,
+            }
+        )
+        return config
 
     def build(self, input_shape):
         self.relative_position_bias_table = self.add_weight(
-            f"{self.prefix}/attn/relative_position_bias_table",
+            f"{self.name}_attn_relative_position_bias_table",
             shape=(
                 (2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1),
                 self.num_heads,
@@ -342,7 +381,7 @@ class WindowAttention(tf.keras.layers.Layer):
         self.relative_position_index = tf.Variable(
             initial_value=tf.convert_to_tensor(relative_position_index),
             trainable=False,
-            name=f"{self.prefix}/attn/relative_position_index",
+            name=f"{self.name}_attn_relative_position_index",
         )
         self.built = True
 
@@ -356,7 +395,7 @@ class WindowAttention(tf.keras.layers.Layer):
         )  # (3, n_windows*B, n_heads, Wh*Ww, C // n_heads)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
-        q = q * self.scale
+        q = q * self.qk_scale
         attn = q @ tf.transpose(
             k, perm=[0, 1, 3, 2]
         )  # (n_windows*B, n_heads, Wh*Ww, Wh*Ww)
@@ -397,10 +436,16 @@ class WindowAttention(tf.keras.layers.Layer):
 
 
 class DropPath(Layer):
-    def __init__(self, drop_prob) -> None:
-        super().__init__()
+    def __init__(self, drop_prob, **kwargs) -> None:
+        super().__init__(**kwargs)
 
         self.drop_prob = drop_prob
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"drop_prob": self.drop_prob})
+
+        return config
 
     def call(self, x, training=None):
 
@@ -431,11 +476,11 @@ class SwinTransformerBlock(Layer):
         drop=0.0,
         attn_drop=0.0,
         drop_path_prob=0.0,
-        act_layer=Activation(tf.nn.gelu),
-        norm_layer=LayerNormalization,
-        prefix="",
+        activation="gelu",
+        name=None,
+        **kwargs,
     ) -> None:
-        super().__init__(name=prefix)
+        super().__init__(name=name, **kwargs)
 
         self.dim = dim
         self.input_resolution = input_resolution
@@ -443,6 +488,12 @@ class SwinTransformerBlock(Layer):
         self.window_size = window_size
         self.shift_size = shift_size
         self.mlp_ratio = mlp_ratio
+        self.activation = activation
+        self.qkv_bias = qkv_bias
+        self.qk_scale = qk_scale
+        self.drop = drop
+        self.attn_drop = attn_drop
+        self.drop_path_prob = drop_path_prob
 
         if min(self.input_resolution) <= self.window_size:
             self.shift_size = 0
@@ -453,27 +504,51 @@ class SwinTransformerBlock(Layer):
                 "shift size must be greater than zero and smaller than window size"
             )
 
-        self.prefix = prefix
-        self.norm1 = norm_layer(epsilon=1e-5, name=f"{self.prefix}_norm1")
+        self.norm1 = LayerNormalization(epsilon=1e-5, name=f"{self.name}_norm1")
         self.attn = WindowAttention(
-            dim=dim,
+            dim=self.dim,
             window_size=(self.window_size, self.window_size),
-            num_heads=num_heads,
-            qkv_bias=qkv_bias,
-            qk_scale=qk_scale,
-            attn_drop=attn_drop,
-            proj_drop=drop,
-            prefix=self.prefix,
+            num_heads=self.num_heads,
+            qkv_bias=self.qkv_bias,
+            qk_scale=self.qk_scale,
+            attn_drop=self.attn_drop,
+            proj_drop=self.drop,
+            name=f"{self.name}_WindowAttention",
         )
-        self.drop_path = DropPath(drop_path_prob if drop_path_prob > 0.0 else 0.0)
-        self.norm2 = norm_layer(epsilon=1e-5, name=f"{prefix}_norm2")
-        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.drop_path = DropPath(
+            self.drop_path_prob if self.drop_path_prob > 0.0 else 0.0
+        )
+        self.norm2 = LayerNormalization(epsilon=1e-5, name=f"{self.name}_norm2")
+        mlp_hidden_dim = int(self.dim * self.mlp_ratio)
         self.mlp = Mlp(
-            in_features=dim,
+            in_features=self.dim,
             hidden_features=mlp_hidden_dim,
-            drop=drop,
-            prefix=self.prefix,
+            drop=self.drop,
+            name=self.name,
+            activation=self.activation,
         )
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "dim": self.dim,
+                "input_resolution": self.input_resolution,
+                "num_heads": self.num_heads,
+                "window_size": self.window_size,
+                "shift_size": self.shift_size,
+                "mlp_ratio": self.mlp_ratio,
+                "qkv_bias": self.qkv_bias,
+                "qk_scale": self.qk_scale,
+                "drop": self.drop,
+                "attn_drop": self.attn_drop,
+                "drop_path_prob": self.drop_path_prob,
+                "activation": self.activation,
+                "name": self.name,
+            }
+        )
+
+        return config
 
     def build(self, input_shape):
 
@@ -513,7 +588,7 @@ class SwinTransformerBlock(Layer):
             self.attn_mask = tf.Variable(
                 initial_value=attn_mask,
                 trainable=False,
-                name=f"{self.prefix}_attn_mask",
+                name=f"{self.name}_attn_mask",
             )
 
         else:
@@ -577,9 +652,10 @@ class PatchEmbed(Layer):
         patch_size=(4, 4),
         in_chans=3,
         embed_dim=96,
-        norm_layer=None,
+        name="patch_embed",
+        **kwargs,
     ) -> None:
-        super().__init__(name="patch_embed")
+        super().__init__(name=name, **kwargs)
 
         patches_resolution = [
             img_size[0] // patch_size[0],
@@ -593,13 +669,26 @@ class PatchEmbed(Layer):
         self.embed_dim = embed_dim
 
         self.proj = Conv2D(
-            embed_dim, kernel_size=patch_size, strides=patch_size, name="proj"
+            self.embed_dim,
+            kernel_size=self.patch_size,
+            strides=self.patch_size,
+            name="proj",
         )
 
-        if norm_layer is not None:
-            self.norm = norm_layer(epsilon=1e-5, name="norm")
-        else:
-            self.norm = None
+        self.norm_layer = LayerNormalization(epsilon=1e-5, name="norm")
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "img_size": self.img_size,
+                "patch_size": self.patch_size,
+                "in_chans": self.in_chans,
+                "embed_dim": self.embed_dim,
+            }
+        )
+
+        return config
 
     def call(self, x):
 
@@ -620,8 +709,7 @@ class PatchEmbed(Layer):
             ],
         )
 
-        if self.norm is not None:
-            x = self.norm(x)
+        x = self.norm_layer(x)
 
         return x
 
@@ -632,10 +720,10 @@ class PatchMerging(Layer):
         input_resolution,
         dim=None,
         downsample=2,
-        norm_layer=LayerNormalization,
-        prefix="",
+        name=None,
+        **kwargs,
     ) -> None:
-        super().__init__(name=f"{prefix}_PatchMerging_{downsample}X")
+        super().__init__(name=f"{name}_PatchMerging_{downsample}X", **kwargs)
 
         self.input_resolution = input_resolution
         self.downsample = downsample
@@ -645,14 +733,25 @@ class PatchMerging(Layer):
             self.reduction = Dense(
                 self.downsample * dim,
                 use_bias=False,
-                name=f"{prefix}_downsample_reduction",
+                name=f"{name}_downsample_reduction",
             )
         else:
             self.dim = None
             self.reduction = None
 
-        self.prefix = prefix
-        self.norm = norm_layer(epsilon=1e-5, name=f"{prefix}_downsample_norm")
+        self.norm = LayerNormalization(epsilon=1e-5, name=f"{name}_downsample_norm")
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "input_resolution": self.input_resolution,
+                "dim": self.dim,
+                "downsample": self.downsample,
+                "name": self.name,
+            }
+        )
+        return config
 
     def call(self, x):
 
@@ -668,7 +767,7 @@ class PatchMerging(Layer):
         x = tf.reshape(x, shape=[-1, H, W, C])
 
         x_merge = tf.nn.space_to_depth(
-            x, block_size=self.downsample, name=f"{self.prefix}_merge"
+            x, block_size=self.downsample, name=f"{self.name}_merge"
         )
         x_merge = tf.reshape(
             x_merge,
@@ -693,27 +792,40 @@ class PatchExpanding(Layer):
         dim=None,
         upsample=2,
         expand_dims=False,
-        norm_layer=LayerNormalization,
-        prefix="",
+        name=None,
+        **kwargs,
     ) -> None:
-        super().__init__(name=f"{prefix}_PatchExpanding_{upsample}X")
+        super().__init__(name=f"{name}_PatchExpanding_{upsample}X", **kwargs)
 
         self.input_resolution = input_resolution
         self.upsample = upsample
+        self.expand_dims = expand_dims
 
-        if (dim is not None) and expand_dims:
+        if (dim is not None) and self.expand_dims:
             self.dim = dim
             self.expansion = Dense(
                 dim,
                 use_bias=False,
-                name=f"{prefix}_upsample_expansion",
+                name=f"{name}_upsample_expansion",
             )
         else:
             self.dim = None
             self.expansion = None
 
-        self.prefix = prefix
-        self.norm = norm_layer(epsilon=1e-5, name=f"{prefix}_upsample_norm")
+        self.norm = LayerNormalization(epsilon=1e-5, name=f"{name}_upsample_norm")
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "input_resolution": self.input_resolution,
+                "dim": self.dim,
+                "upsample": self.upsample,
+                "expand_dims": self.expand_dims,
+                "name": self.name,
+            }
+        )
+        return config
 
     def call(self, x):
 
@@ -726,7 +838,7 @@ class PatchExpanding(Layer):
         x = tf.reshape(x, shape=[-1, H, W, C])
 
         x_merge = tf.nn.depth_to_space(
-            x, block_size=self.upsample, name=f"{self.prefix}_merge"
+            x, block_size=self.upsample, name=f"{self.name}_merge"
         )
         x_merge = tf.reshape(
             x_merge,
@@ -756,9 +868,8 @@ def SwinBasicLayer(
     drop=0.0,
     attn_drop=0.0,
     drop_path_prob=0.0,
-    norm_layer=LayerNormalization,
     downsample=None,
-    prefix="",
+    name=None,
 ):
 
     x = input
@@ -779,14 +890,11 @@ def SwinBasicLayer(
             drop_path_prob=drop_path_prob[i]
             if isinstance(drop_path_prob, list)
             else drop_path_prob,
-            norm_layer=norm_layer,
-            prefix=f"{prefix}_block_{i}",
+            name=f"{name}_block_{i}",
         )(x)
 
     if downsample is not None:
-        x = downsample(input_resolution, dim=dim, norm_layer=norm_layer, prefix=prefix)(
-            x
-        )
+        x = downsample(input_resolution, dim=dim, name=name)(x)
 
     return x
 
@@ -805,10 +913,9 @@ def SwinDecoderLayer(
     drop=0.0,
     attn_drop=0.0,
     drop_path_prob=0.0,
-    norm_layer=LayerNormalization,
     upsample=None,
     expand_dims=False,
-    prefix="",
+    name=None,
 ):
 
     if upsample is not None:
@@ -816,12 +923,11 @@ def SwinDecoderLayer(
             input_resolution,
             dim=dim,
             expand_dims=expand_dims,
-            norm_layer=norm_layer,
-            prefix=prefix,
+            name=name,
         )(input)
         input_resolution = (input_resolution[0] * 2, input_resolution[1] * 2)
-    x = Concatenate(axis=-1, name=f"{prefix}_concat")([x, skip])
-    x = Dense(dim, use_bias=False, name=f"{prefix}_projection")(x)
+    x = Concatenate(axis=-1, name=f"{name}_concat")([x, skip])
+    x = Dense(dim, use_bias=False, name=f"{name}_projection")(x)
 
     for i in range(depth):
 
@@ -839,8 +945,7 @@ def SwinDecoderLayer(
             drop_path_prob=drop_path_prob[i]
             if isinstance(drop_path_prob, list)
             else drop_path_prob,
-            norm_layer=norm_layer,
-            prefix=f"{prefix}_block_{i}",
+            name=f"{name}_block_{i}",
         )(x)
 
     return x

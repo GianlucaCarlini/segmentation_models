@@ -25,7 +25,6 @@ def SwinTransformer(
     drop_rate=0.0,
     attn_drop_rate=0.0,
     drop_path_rate=0.1,
-    norm_layer=LayerNormalization,
     ape=False,
     patch_norm=True,
     **kwargs,
@@ -80,7 +79,6 @@ def SwinTransformer(
         patch_size=patch_size,
         in_chans=in_chans,
         embed_dim=embed_dim,
-        norm_layer=norm_layer if patch_norm else None,
     )
     num_patches = patch_embed.num_patch
 
@@ -112,9 +110,8 @@ def SwinTransformer(
             drop=drop_rate,
             attn_drop=attn_drop_rate,
             drop_path_prob=dpr[sum(depths[:i_layer]) : sum(depths[: i_layer + 1])],
-            norm_layer=norm_layer,
             downsample=PatchMerging if (i_layer < num_layers - 1) else None,
-            prefix=f"stage_{i_layer}",
+            name=f"stage_{i_layer}",
         )
 
     x = LayerNormalization(epsilon=1e-5)(x)
@@ -144,7 +141,6 @@ def Swin_Unet(
     attn_drop_rate=0.0,
     drop_path_rate=0.1,
     final_conv_layers=16,
-    norm_layer=LayerNormalization,
     ape=False,
     patch_norm=True,
     **kwargs,
@@ -212,7 +208,6 @@ def Swin_Unet(
         drop_rate=drop_rate,
         attn_drop_rate=attn_drop_rate,
         drop_path_rate=drop_path_rate,
-        norm_layer=norm_layer,
         ape=ape,
         patch_norm=patch_norm,
     )
@@ -255,10 +250,9 @@ def Swin_Unet(
             drop=drop_rate,
             attn_drop=attn_drop_rate,
             drop_path_prob=0.0,
-            norm_layer=norm_layer,
             expand_dims=True,
             upsample=PatchExpanding,
-            prefix=f"decoder_{i}",
+            name=f"decoder_{i}",
         )
 
     x = PatchExpanding(
@@ -269,13 +263,17 @@ def Swin_Unet(
         dim=int(x.shape[-1] // 2),
         expand_dims=True,
         upsample=patch_size[0],
-        prefix="decoder_final",
+        name="decoder_final",
     )(x)
 
     x = tf.reshape(x, shape=(-1, input_shape[0], input_shape[1], x.shape[-1]))
 
     x = Conv2D(
-        final_conv_layers, kernel_size=3, activation="gelu", name="output_conv_layer"
+        final_conv_layers,
+        kernel_size=3,
+        activation="gelu",
+        name="output_conv_layer",
+        padding="same",
     )(x)
 
     x = Conv2D(classes, kernel_size=1, activation=final_activation, name="final_conv")(
