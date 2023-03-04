@@ -65,6 +65,18 @@ class ModelBackbones:
             "conv2_block3_out",
             "conv1_relu",
         ),
+        "mobilenetv1": (
+            "conv_pw_11_relu",
+            "conv_pw_5_relu",
+            "conv_pw_3_relu",
+            "conv_pw_1_relu",
+        ),
+        "mobilenetv2": (
+            "block_13_expand_relu",
+            "block_6_expand_relu",
+            "block_3_expand_relu",
+            "block_1_expand_relu",
+        ),
     }
 
     _models = {
@@ -78,6 +90,8 @@ class ModelBackbones:
         "efficientnetb7": tf.keras.applications.efficientnet.EfficientNetB7,
         "resnet50": tf.keras.applications.resnet.ResNet50,
         "resnet101": tf.keras.applications.resnet.ResNet101,
+        "mobilenetv1": tf.keras.applications.mobilenet.MobileNet,
+        "mobilenetv2": tf.keras.applications.mobilenet_v2.MobileNetV2,
     }
 
     @property
@@ -112,6 +126,9 @@ class ModelBackbones:
         model_fn = self.models[name]
         model_fn = self.inject_submodules(model_fn)
         return model_fn
+
+    def get_feature_layers(self, name):
+        return self._backbone_layers[name]
 
     def get_backbone(self, name, *args, **kwargs):
 
