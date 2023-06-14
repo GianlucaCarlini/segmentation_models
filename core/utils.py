@@ -5,18 +5,7 @@ from typing import Callable
 
 
 def predict_big_image(img, patch_size, stride, classes, model, batch_size=8, pad=False):
-    """Function to predict gigantic images. The purpose of this function is to predict
-       very big images without using an excessive amount of RAM.
-       If you want to predict patches from an image using a stride < patch size,
-       the number of patches to predict grows as the stride decreases.
-       e.g. if stride = patch_size/2, the number of patches will be 4 times the
-       number of patches obtained with stride = patch_size, so it will require 4 times
-       the memory.
-       Moreover, to manipulate those patches you need to convert them as floats,
-       which of course requires more memory than the usual uint8 format.
-       This function creates batches of image patches on the fly, allowing to predict
-       very big images using a fair amount of RAM.
-       Of course it will be slower than predicting all the patches together.
+    """
 
     Args:
         img (uint8): The image to predict.
