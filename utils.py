@@ -77,7 +77,6 @@ def predict_big_image(img, patch_size, stride, classes, model, batch_size=8, pad
                 ]
 
             batch = batch.astype(np.float32)
-            batch *= 1.0 / 255.0
             prediction = model.predict_on_batch(batch)
 
             """
@@ -108,7 +107,6 @@ def predict_big_image(img, patch_size, stride, classes, model, batch_size=8, pad
                 + patch_size,
             ]
         batch = batch.astype(np.float32)
-        batch *= 1.0 / 255.0
         prediction = model.predict_on_batch(batch[: (N_PATCH_W % BATCH_SIZE), ...])
 
         for j in range(N_PATCH_W % BATCH_SIZE):
